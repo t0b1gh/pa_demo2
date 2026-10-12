@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Survey Prototype</title>
+<style>
+  :root { --bg:#f4f4f2; --card:#fff; --ink:#1c1c1c; --muted:#666; --accent:#2b5fd9; --line:#bbb; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         background:var(--bg); color:var(--ink); font:18px/1.5 system-ui, sans-serif; padding:16px; }
+  .card { background:var(--card); width:100%; max-width:640px; padding:32px 28px; border-radius:16px;
+          box-shadow:0 4px 24px rgba(0,0,0,.08); }
+  .card p { margin:0 0 1em; }
+  .statement { font-size:1.4em; font-weight:600; margin-bottom:2em !important; }
+  .vas { position:relative; height:44px; margin:32px 8px 8px; cursor:pointer; touch-action:none; user-select:none; }
+  .vas::before { content:""; position:absolute; left:0; right:0; top:50%; height:4px; margin-top:-2px;
+                 background:var(--line); border-radius:2px; }
+  .vas .end { position:absolute; top:50%; width:2px; height:20px; margin-top:-10px; background:var(--line); }
+  .vas .end.l { left:0; } .vas .end.r { right:0; }
+  .handle { position:absolute; top:50%; width:26px; height:26px; margin:-13px 0 0 -13px; border-radius:50%;
+            background:var(--accent); box-shadow:0 1px 6px rgba(0,0,0,.3); display:none; }
+  .vas.set .handle { display:block; }
+  .labels { display:flex; justify-content:space-between; gap:16px; color:var(--muted); font-size:.85em; }
+  .labels span:last-child { text-align:right; }
+  button { margin-top:28px; padding:10px 28px; font:inherit; color:#fff; background:var(--accent);
+           border:0; border-radius:8px; cursor:pointer; }
+  button:disabled { background:var(--line); cursor:not-allowed; }
+  .center { text-align:center; }
+  body { perspective:1200px; }
+  .card { transition:transform .3s ease, opacity .3s ease; }
+  .card.out  { transform:rotateY(90deg);  opacity:0; }
+  .card.prep { transform:rotateY(-90deg); opacity:0; transition:none; }
+  @media (prefers-reduced-motion: reduce) { .card { transition:none; } }
+</style>
+</head>
+<body>
+<main class="card" id="card"></main>
+
+<script>
+const cards = [
+  { key: "agree",
+    html: `<p class="statement">Artificial intelligence can become more capable than a human in a wide variety of tasks.</p>`,
+    left: "Disagree", right: "Agree" },
+  { key: "relevance",
+    html: `<p>In 1970, Grandpa saw a pocket calculator and shrugged: “It only does sums.”</p>
+           <p>In 1997, a computer beat the world chess champion. People said: “It only plays chess.”</p>
+           <p>Then computers learned to translate, recognize faces, write letters, and pass medical exams. Each time, someone said: “But it can only do that.”</p>
+           <p><strong>The sentence stayed the same. The list after “only” kept getting shorter.</strong></p>`,
+    left: "Irrelevant – Wouldn't tell a friend", right: "Relevant – Would tell a friend" },
+];
+
+const card = document.getElementById("card");
+const answers = {};
+let step = 0;
+
+function render() {
+  if (step >= cards.length) return done();
+  const c = cards[step];
+  card.innerHTML = `${c.html}
+    <div class="vas" id="vas" role="slider" aria-valuemin="0" aria-valuemax="100" tabindex="0">
+      <div class="end l"></div><div class="end r"></div><div class="handle" id="handle"></div>
+    </div>
+    <div class="labels"><span>${c.left}</span><span>${c.right}</span></div>
+    <button id="next" disabled>${step === cards.length - 1 ? "Finish" : "Next"}</button>`;
+
+  const vas = document.getElementById("vas"), handle = document.getElementById("handle"), next = document.getElementById("next");
+  let dragging = false;
+
+  const setValue = v => {
+    v = Math.max(0, Math.min(100, v));
+    answers[c.key] = Math.round(v * 10) / 10;
+    handle.style.left = v + "%";
+    vas.classList.add("set");
+    vas.setAttribute("aria-valuenow", Math.round(v));
+    next.disabled = false;
+  };
+  const fromEvent = e => { const r = vas.getBoundingClientRect(); return (e.clientX - r.left) / r.width * 100; };
+
+  vas.addEventListener("pointerdown", e => { dragging = true; vas.setPointerCapture(e.pointerId); setValue(fromEvent(e)); });
+  vas.addEventListener("pointermove", e => { if (dragging) setValue(fromEvent(e)); });
+  vas.addEventListener("pointerup",   () => dragging = false);
+  vas.addEventListener("keydown", e => {
+    const cur = answers[c.key] ?? 50;
+    if (e.key === "ArrowLeft") setValue(cur - 2);
+    if (e.key === "ArrowRight") setValue(cur + 2);
+  });
+  next.addEventListener("click", () => flip(() => { step++; render(); }));
+}
+
+// Flip the card: rotate out, swap content, rotate back in.
+function flip(swap) {
+  card.classList.add("out");
+  setTimeout(() => {
+    swap();
+    card.classList.remove("out");
+    card.classList.add("prep");
+    void card.offsetWidth;
+    card.classList.remove("prep");
+  }, 300);
+}
+
+function done() {
+  const result = { answers, submittedAt: new Date().toISOString() };
+  console.log("Survey result", result);
+  try { localStorage.setItem("survey-result", JSON.stringify(result)); } catch (e) {}
+  card.innerHTML = `<p class="center statement" style="margin:0 !important">Thank you for participating.</p>`;
+}
+
+render();
+</script>
+</body>
+</html>
